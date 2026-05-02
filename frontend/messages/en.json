@@ -1,0 +1,51 @@
+{
+  "home": {
+    "title": "GCC Wellness",
+    "subtitle": "Mental wellness support for the GCC region"
+  },
+  "nav": {
+    "findTherapist": "Find a Therapist",
+    "howItWorks": "How It Works",
+    "forOrganizations": "For Organizations",
+    "login": "Log In",
+    "getStarted": "Get Started"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your account",
+      "email": "Email address",
+      "password": "Password",
+      "forgotPassword": "Forgot your password?",
+      "submit": "Sign in",
+      "noAccount": "Don't have an account?",
+      "register": "Sign up"
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Start your wellness journey today",
+      "email": "Email address",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "submit": "Create account",
+      "hasAccount": "Already have an account?",
+      "login": "Sign in",
+      "terms": "By creating an account, you agree to our Terms of Service and Privacy Policy."
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "networkError": "Unable to connect. Please check your internet connection.",
+    "unauthorized": "Please sign in to continue.",
+    "notFound": "Page not found."
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close"
+  }
+}

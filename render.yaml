@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: gcc-wellness-api
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerTarget: production
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: production-secrets
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+
+databases:
+  - name: gcc-wellness-db
+    plan: starter
+    ipAllowList: []

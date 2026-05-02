@@ -1,0 +1,196 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint backend (Ruff)
+        run: |
+          pip install ruff
+          ruff check backend/app/
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Lint frontend (ESLint)
+        run: cd frontend && pnpm lint
+
+      - name: PHI leak check
+        run: bash scripts/check-phi-leaks.sh
+
+  test-backend:
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: wellness_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/wellness_test
+          REDIS_URL: redis://localhost:6379/0
+          APP_ENV: development
+          SECRET_KEY: test-secret-key-not-for-production
+          AI_PROVIDER: mock
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/wellness_test
+          REDIS_URL: redis://localhost:6379/0
+          APP_ENV: development
+          SECRET_KEY: test-secret-key-not-for-production
+          AI_PROVIDER: mock
+        run: |
+          cd backend
+          pytest tests/unit -v --cov=app --cov-report=xml
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/wellness_test
+          REDIS_URL: redis://localhost:6379/0
+          APP_ENV: development
+          SECRET_KEY: test-secret-key-not-for-production
+          AI_PROVIDER: mock
+        run: |
+          cd backend
+          pytest tests/integration -v
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Run Jest tests
+        run: cd frontend && pnpm test --coverage
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend Docker image
+        run: docker build --target production -t gcc-wellness-backend:${{ github.sha }} ./backend
+
+      - name: Build frontend Docker image
+        run: docker build --target production -t gcc-wellness-frontend:${{ github.sha }} ./frontend
+
+      - name: Validate env vars
+        run: bash scripts/validate-env.sh
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Render (staging)
+        run: |
+          curl -fsSX POST "${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}"
+
+      - name: Wait for deploy
+        run: sleep 60
+
+      - name: Smoke test staging health endpoint
+        run: |
+          curl -f https://staging.gcc-wellness.com/health
+
+      - name: Run E2E tests against staging
+        run: |
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm cypress run --env baseUrl=https://staging.gcc-wellness.com
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production   # Requires manual approval in GitHub Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Render (production)
+        run: |
+          curl -fsSX POST "${{ secrets.RENDER_DEPLOY_HOOK_PRODUCTION }}"
+
+      - name: Deploy frontend to Vercel (production)
+        run: |
+          npm install -g pnpm
+          npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
