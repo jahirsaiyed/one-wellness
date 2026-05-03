@@ -55,7 +55,8 @@ class TOTPSetupResponse(BaseModel):
 
 
 class TOTPVerifyRequest(BaseModel):
-    code: str = Field(min_length=6, max_length=8)
+    # 6 chars: TOTP codes. 9 chars: backup codes displayed as "XXXX-YYYY" (hyphen included).
+    code: str = Field(min_length=6, max_length=9)
 
 
 class TOTPVerifyResponse(BaseModel):
